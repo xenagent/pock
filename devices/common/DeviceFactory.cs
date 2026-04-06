@@ -12,7 +12,7 @@ public class DeviceFactory : IDeviceFactory
     {
         BarcodeReaderConfig bc => bc.ConnectionMode.CreateDevice(),
         ScaleConfig            => new SerialScaleDevice(),
-        PosConfig              => new IngenicoPos(new IngenicoLibraryAdapter()),
+        PosConfig              => new IngenicoPos(),
         PrinterConfig          => new EscPosPrinter(),
         _                      => throw new NotSupportedException($"Unsupported config type: {config.GetType().Name}")
     };
