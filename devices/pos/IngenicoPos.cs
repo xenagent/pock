@@ -22,11 +22,21 @@ public class IngenicoPos : IPosTerminal
 {
     private const int XmlBufferSize = 65536; // 64 KB — slip içerebilir
 
+    private readonly IImpProLibrary _lib;
     private PosConfig? _config;
     private IntPtr _handle = IntPtr.Zero;
 
     public string DeviceId { get; private set; } = "";
     public DeviceStatus Status { get; private set; } = DeviceStatus.NotInitialized;
+
+    /// <summary>
+    /// Production: <c>new IngenicoPos()</c>  →  gerçek ImpProDLL.dll kullanır
+    /// Geliştirme:  <c>new IngenicoPos(new FakeImpProLibrary())</c>  →  DLL gerekmez
+    /// </summary>
+    public IngenicoPos(IImpProLibrary? lib = null)
+    {
+        _lib = lib ?? new ImpProLibrary();
+    }
 
     // ── Olaylar ───────────────────────────────────────────────────────
 
@@ -43,7 +53,7 @@ public class IngenicoPos : IPosTerminal
         _config = (PosConfig)config;
         DeviceId = config.DeviceId;
 
-        ImpProNative.Imp_SetXmlFilePath(_config.XmlConfigFilePath);
+        _lib.SetXmlFilePath(_config.XmlConfigFilePath);
 
         Status = DeviceStatus.Disconnected;
         return Task.CompletedTask;
@@ -56,7 +66,7 @@ public class IngenicoPos : IPosTerminal
         var xml = ImpProXmlHelper.BuildInterfaceXml(_config!);
         var xmlBytes = ImpProXmlHelper.Encode(xml);
 
-        _handle = ImpProNative.Imp_CreateInterface(xmlBytes, xmlBytes.Length);
+        _handle = _lib.CreateInterface(xmlBytes, xmlBytes.Length);
 
         if (_handle == IntPtr.Zero)
         {
@@ -74,7 +84,7 @@ public class IngenicoPos : IPosTerminal
     {
         if (_handle != IntPtr.Zero)
         {
-            ImpProNative.Imp_RemoveInterfaceByHandle(_handle);
+            _lib.RemoveInterfaceByHandle(_handle);
             _handle = IntPtr.Zero;
         }
 
@@ -112,7 +122,7 @@ public class IngenicoPos : IPosTerminal
     public Task CancelAsync()
     {
         if (_handle != IntPtr.Zero)
-            ImpProNative.Imp_CancelReceive(_handle);
+            _lib.CancelReceive(_handle);
         return Task.CompletedTask;
     }
 
@@ -130,7 +140,7 @@ public class IngenicoPos : IPosTerminal
         int installmentCount = 0,
         string? originalAuthCode = null)
     {
-        ImpProNative.Imp_GenerateSesionID(out var sessionId);
+        _lib.GenerateSesionID(out var sessionId);
         var amountKurus = (long)(amount * 100);
 
         // İşlem parametrelerini POS'a gönder
@@ -141,7 +151,7 @@ public class IngenicoPos : IPosTerminal
                 _config!.TimeoutSeconds, installmentCount);
 
         var paramBytes = ImpProXmlHelper.Encode(paramXml);
-        var updateRc = ImpProNative.Imp_UpdateInterfaceXmlDataByHandle(
+        var updateRc = _lib.UpdateInterfaceXmlDataByHandle(
             _handle, paramBytes, paramBytes.Length);
 
         if (updateRc != ImpProRetCode.Success)
@@ -154,7 +164,7 @@ public class IngenicoPos : IPosTerminal
         {
             while (true)
             {
-                var rc = ImpProNative.Imp_ExecuteTransactionStep(_handle);
+                var rc = _lib.ExecuteTransactionStep(_handle);
 
                 if (rc != ImpProRetCode.Success && rc != ImpProRetCode.RecvEot)
                     return PosPaymentResult.Fail(rc.ToString(), GetErrorDescription(rc));
@@ -208,11 +218,11 @@ public class IngenicoPos : IPosTerminal
             throw new InvalidOperationException("POS terminali bağlı değil.");
     }
 
-    private static string ReadXmlFromHandle(IntPtr handle)
+    private string ReadXmlFromHandle(IntPtr handle)
     {
         var buffer = new byte[XmlBufferSize];
         var len = XmlBufferSize;
-        ImpProNative.Imp_GetInterfaceXmlDataByHandle(handle, buffer, ref len);
+        _lib.GetInterfaceXmlDataByHandle(handle, buffer, ref len);
         return ImpProXmlHelper.Decode(buffer, len);
     }
 
@@ -220,7 +230,7 @@ public class IngenicoPos : IPosTerminal
     {
         var buffer = new byte[512];
         var len = buffer.Length;
-        var rc = ImpProNative.Imp_GetErrorTurkishDescription(retCode, buffer, ref len);
+        var rc = _lib.GetErrorTurkishDescription(retCode, buffer, ref len);
         return rc == ImpProRetCode.Success
             ? ImpProXmlHelper.Decode(buffer, len)
             : $"Hata kodu: 0x{retCode:X4}";
