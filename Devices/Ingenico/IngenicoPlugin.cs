@@ -16,10 +16,6 @@ public sealed class IngenicoPlugin : IDevicePlugin
                   ?? new PosTerminalConfig();
 
         services.AddSingleton(cfg);
-
-        // Production: ImpProLibrary  |  Test/Geliştirme: FakeImpProLibrary
-        services.AddSingleton<IImpProLibrary, ImpProLibrary>();
-
         services.AddSingleton<IPOSDevice, IngenicoDevice>();
     }
 }
